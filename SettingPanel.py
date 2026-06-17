@@ -922,9 +922,25 @@ class SettingsDialog(QDialog):
     # —— 代码规格化 —— #
     _re_full = re.compile(r'^(sh|sz|bj)\d+$')
     _re_6 = re.compile(r'^\d{6}$')
+    # 【新增】：匹配期货代码的正则 (nf_ 或 hf_ 开头，后面跟字母和数字)
+    _re_futures = re.compile(r'^(nf|hf)_[a-zA-Z0-9]+$', re.IGNORECASE)
 
     def _normalize_code_or_none(self, s: str):
-        s = (s or "").strip().lower()
+        # 先不要转全小写，保留原始输入用于判断期货
+        original_s = (s or "").strip()
+        
+        # ==========================================
+        # 【新增逻辑】：提前拦截并放行期货代码
+        # ==========================================
+        if self._re_futures.match(original_s):
+            # 新浪期货接口建议：前缀小写 (nf_)，后面代码大写 (AU0)
+            prefix = original_s[:3].lower()
+            code = original_s[3:].upper()
+            return prefix + code
+        # ==========================================
+        
+        # --- 以下是原作者的 A 股处理逻辑（保留不动） ---
+        s = original_s.lower()
         s = re.sub(r'[^a-z0-9]', '', s)
         if not s: return None
         if self._re_full.match(s): return s

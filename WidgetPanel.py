@@ -666,7 +666,21 @@ class FloatLabel(QWidget):
 
     # ----- 数据来源：新浪财经 -----
     def _get_price(self, codes:list):
-        label = ",".join([str(c).strip() for c in codes if str(c).strip()])
+        formatted_codes = []
+        for c in codes:
+            c_str = str(c).strip()
+            if not c_str: 
+                continue
+            # 如果是期货，强制变成小写前缀 + 大写代码 (例如 nf_ + AU0)
+            if c_str.lower().startswith(('nf_', 'hf_')):
+                formatted_codes.append(c_str[:3].lower() + c_str[3:].upper())
+            else:
+                # 如果是A股，保持全小写
+                formatted_codes.append(c_str.lower())
+                
+        label = ",".join(formatted_codes)
+        # ==========================================
+
         if not label:
             raise Exception("暂无数据，请添加自选")
 
@@ -678,33 +692,106 @@ class FloatLabel(QWidget):
         headers = {'Referer': 'https://finance.sina.com.cn', 'User-Agent': 'Mozilla/5.0'}
         r = requests.get(url, headers=headers, timeout=3)
         r.encoding = 'gbk'
+        
         for line in r.text.split('\n'):
             if not line or '"' not in line:
                 continue
-            heads = line.split('="')[0].split('_')
+            
+            prefix_part = line.split('="')[0]
             parts = line.split('="')[1].split(',')
-            if len(parts) < 30:
-                continue
+            
+            # 判断是否为内盘期货 (nf_) 或 外盘期货 (hf_)
+            is_nf_futures = "str_nf_" in prefix_part
+            is_hf_futures = "str_hf_" in prefix_part
+            # 【新增】：统一的一个期货标志位，方便后续使用
+            is_any_futures = is_nf_futures or is_hf_futures
+            
+            if is_hf_futures:
 
-            code          = heads[2]
-            name          = parts[0]
-            opening_price = float(parts[1] or 0)   # 开盘
-            prev_close    = float(parts[2] or 0)   # 昨收
-            current_price = float(parts[3] or 0)   # 现价
-            high_price    = float(parts[4] or 0)   # 当日最高
-            low_price     = float(parts[5] or 0)   # 当日最低
-            first_pur     = float(parts[6] or 0)   # 买一
-            first_sell    = float(parts[7] or 0)   # 卖一
-            deals_vol     = float(parts[8] or 0)   # 成交量
-            deals_amt     = float(parts[9] or 0)   # 成交额
-            purchaser     = [int(x or 0) for x in parts[10:19:2]]  # 买盘，股数
-            pur_price     = [float(x or 0) for x in parts[11:20:2]]  # 买盘，价格
-            seller        = [int(x or 0) for x in parts[20:29:2]]  # 卖盘，股数
-            sel_price     = [float(x or 0) for x in parts[21:30:2]]  # 卖盘，价格
-            update_date   = [int(x or 0) for x in parts[30].split('-')]  # 日期
-            update_time   = [int(x or 0) for x in parts[31].split(':')]  # 时间
+                #print(f"👉 成功进入外盘期货(hf_)解析分支！")
+                #print(f"👉 原始文本行: {line}")
+                #print(f"👉 拆分后的数组 (长度 {len(parts)}): {parts}")
+                #print("="*50 + "\n")
 
-            etf = code[2] in ('1','5')
+                if len(parts) < 14: 
+                    continue
+                code          = prefix_part.split('str_hf_')[-1]
+                name          = parts[13]
+                opening_price = float(parts[8] or 0)
+                high_price    = float(parts[4] or 0)
+                low_price     = float(parts[5] or 0)
+                prev_close    = float(parts[7] or 0)
+                current_price = float(parts[0] or 0)
+                first_pur     = float(parts[2] or 0)
+                first_sell    = float(parts[3] or 0)
+                
+                # 清洗最后一位的符号，防止转 float 报错
+                vol_str       = parts[14].replace('"', '').replace(';', '')
+                deals_vol     = float(vol_str or 0)
+                
+                deals_amt     = current_price * deals_vol 
+                committee     = 0.0
+                pur_vol       = int(parts[10] or 0) * 100 
+                sel_vol       = int(parts[11] or 0) * 100
+                purchaser     = [pur_vol] + [0]*9 
+                pur_price     = [first_pur] + [0]*9
+                seller        = [sel_vol] + [0]*9
+                sel_price     = [first_sell] + [0]*9
+                etf           = False
+
+            elif is_nf_futures:
+
+                if len(parts) < 14:
+                    continue
+                
+                code          = prefix_part.split('str_nf_')[-1]
+                name          = parts[0]
+                opening_price = float(parts[2] or 0)
+                high_price    = float(parts[3] or 0)
+                low_price     = float(parts[4] or 0)
+                
+                # 【修复1】：昨收（昨结算）实际上在索引 10 的位置
+                prev_close    = float(parts[10] or 0) 
+                
+                first_pur     = float(parts[6] or 0)
+                first_sell    = float(parts[7] or 0)
+                current_price = float(parts[8] or 0)
+                deals_vol     = float(parts[14] or 0)
+                
+                # 【修复2】：为了让下面的通用代码能算出正确的均价(avg = amt/vol)，
+                # 我们用 现价*成交量 倒推伪装一个“成交额”给它
+                deals_amt = current_price * deals_vol 
+                committee = 0.0
+                
+                # 期货本身就是手数，为了抵消下方 A 股的除以 100 逻辑，这里乘 100
+                pur_vol = int(parts[11] or 0) * 100 
+                sel_vol = int(parts[12] or 0) * 100
+                purchaser = [pur_vol] + [0]*9 
+                pur_price = [first_pur] + [0]*9
+                seller    = [sel_vol] + [0]*9
+                sel_price = [first_sell] + [0]*9
+                etf = False
+
+            else:
+                if len(parts) < 30:
+                    continue
+                heads = prefix_part.split('_')
+                code          = heads[2]
+                name          = parts[0]
+                opening_price = float(parts[1] or 0)   # 开盘
+                prev_close    = float(parts[2] or 0)   # 昨收
+                current_price = float(parts[3] or 0)   # 现价
+                high_price    = float(parts[4] or 0)   # 当日最高
+                low_price     = float(parts[5] or 0)   # 当日最低
+                first_pur     = float(parts[6] or 0)   # 买一
+                first_sell    = float(parts[7] or 0)   # 卖一
+                deals_vol     = float(parts[8] or 0)   # 成交量
+                deals_amt     = float(parts[9] or 0)   # 成交额
+                purchaser     = [int(x or 0) for x in parts[10:19:2]]  
+                pur_price     = [float(x or 0) for x in parts[11:20:2]]  
+                seller        = [int(x or 0) for x in parts[20:29:2]]  
+                sel_price     = [float(x or 0) for x in parts[21:30:2]]  
+                etf = code[2] in ('1','5') if len(code)>2 else False
 
             # 构建买一/卖一数据及其颜色信息，并添加位置箭头
             b1_label = ""
@@ -880,6 +967,7 @@ class FloatLabel(QWidget):
 
             # 委比格式化
             commi_label = self._fmt_signed(committee, 2) + "%"
+            display_code = code[2:] if not is_any_futures and self.short_code else code
 
             # "代码", "名称", "现价", "涨跌值", "涨跌幅", "盈亏", "买一", "卖一", "委比", "成交量", "成交额", "均价", "日高", "日低", "K线"
             if code[2] not in ('1','5'):
