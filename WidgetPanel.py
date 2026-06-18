@@ -2,8 +2,8 @@ import requests, keyboard, time
 from collections import deque
 from functools import partial
 
-from PySide6.QtCore import Qt, QEvent, QTimer, Signal, QPoint
-from PySide6.QtGui import QFont, QAction, QColor, QGuiApplication
+from PySide6.QtCore import QPropertyAnimation, QRect, Qt, QEvent, QTimer, Signal, QPoint
+from PySide6.QtGui import QEnterEvent, QFont, QAction, QColor, QGuiApplication
 from PySide6.QtWidgets import QApplication, QWidget, QMenu, QVBoxLayout, QLabel, QTableView, QHeaderView, QAbstractItemView, QFrame, QStyledItemDelegate
 
 from Display import SimpleTableModel, KLineDelegate, DEFAULT_UP_COLOR, DEFAULT_DOWN_COLOR, DEFAULT_TABLE_COLOR
@@ -14,6 +14,24 @@ class FloatLabel(QWidget):
         super().__init__()
         self._on_change = (lambda: None)
         self._open_settings_cb = None
+
+        # --- 贴边隐藏相关设置 ---
+        self.is_hidden_state = False # 记录当前是否处于隐藏状态
+        self.edge_margin = 10        # 距离边缘多少像素算“贴边”
+        self.expose_width = 15        # 隐藏后露出的像素宽度（用来接收鼠标事件）
+        self.hidden_pos = None       # 隐藏时的位置
+        self.normal_pos = None       # 正常显示时的位置
+        self.hide_direction = None   # 隐藏方向：'top', 'left', 'right'
+        self.is_dragging = False  # 记录当前是否正在被鼠标拖拽
+
+        # 检查贴边的定时器
+        self.edge_check_timer = QTimer(self)
+        self.edge_check_timer.timeout.connect(self._check_edge_and_hide)
+        self.edge_check_timer.start(500) # 每 500 毫秒检查一次
+
+        # 平滑移动动画
+        self.anim = QPropertyAnimation(self, b"pos")
+        self.anim.setDuration(200) # 动画时长 200 毫秒
 
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
@@ -307,6 +325,106 @@ class FloatLabel(QWidget):
         self._keep_top_timer.timeout.connect(self._ensure_on_top)
         self._keep_top_timer.start()
 
+    def _check_edge_and_hide(self):
+        try:
+            screen = self.screen().availableGeometry()
+        except Exception:
+            screen = QApplication.primaryScreen().availableGeometry()
+            
+        curr_rect = self.geometry()
+        
+        # 1. 拦截条件
+        if getattr(self, 'is_hidden_state', False):
+            return
+        if getattr(self, 'is_dragging', False) or not self.isVisible() or self.underMouse():
+            return
+            
+        self.hide_direction = None
+        
+        # 2. 判断贴向哪边，并【强制计算】完美贴边坐标
+        if curr_rect.top() <= screen.top() + self.edge_margin:
+            self.hide_direction = 'top'
+            # 弹出时：顶端紧贴屏幕顶端
+            self.normal_pos = QPoint(curr_rect.left(), screen.top())
+            self.hidden_pos = QPoint(curr_rect.left(), screen.top() - curr_rect.height() + self.expose_width)
+            
+        elif curr_rect.left() <= screen.left() + self.edge_margin:
+            self.hide_direction = 'left'
+            # 弹出时：左端紧贴屏幕左端
+            self.normal_pos = QPoint(screen.left(), curr_rect.top())
+            self.hidden_pos = QPoint(screen.left() - curr_rect.width() + self.expose_width, curr_rect.top())
+            
+        elif curr_rect.right() >= screen.right() - self.edge_margin:
+            self.hide_direction = 'right'
+            # 弹出时：右端紧贴屏幕右端（计算公式：屏幕右边缘 X坐标 - 窗口自身宽度）
+            self.normal_pos = QPoint(screen.right() - curr_rect.width() + 1, curr_rect.top())
+            self.hidden_pos = QPoint(screen.right() - self.expose_width, curr_rect.top())
+
+        # 3. 执行隐藏动画
+        if self.hide_direction:
+            self.is_hidden_state = True
+            self.anim.stop() 
+            # 注意这里：用当前的实际位置作为起点，向隐藏位置移动
+            self.anim.setStartValue(self.pos())
+            self.anim.setEndValue(self.hidden_pos)
+            self.anim.start()
+
+    def enterEvent(self, event):
+        """鼠标进入窗口：统一处理【贴边弹出】和【双模式切换】"""
+        super().enterEvent(event)
+        
+        # ===============================
+        # 1. 贴边弹出逻辑
+        # ===============================
+        if hasattr(self, 'edge_check_timer'):
+            self.edge_check_timer.stop() # 停止检查贴边，防止乱跳
+            
+        if getattr(self, 'is_hidden_state', False) and getattr(self, 'normal_pos', None):
+            self.anim.stop()
+            # 注意：因为动画是 b"pos"，这里必须传当前坐标 (self.pos()) 和目标坐标
+            self.anim.setStartValue(self.pos())
+            self.anim.setEndValue(self.normal_pos)
+            self.anim.start()
+            self.is_hidden_state = False
+
+        # ===============================
+        # 2. 双模式切换逻辑
+        # ===============================
+        if getattr(self, 'dual_mode_enabled', False):
+            # 取消待执行的延迟切换
+            if hasattr(self, '_leave_timer') and self._leave_timer.isActive():
+                self._leave_timer.stop()
+            if not getattr(self, '_is_hovered', False):
+                self._is_hovered = True
+                self._refresh_from_function()
+
+    def leaveEvent(self, event):
+        """鼠标离开窗口：统一处理【贴边隐藏】和【双模式切换】"""
+        super().leaveEvent(event)
+
+        # ===============================
+        # 1. 贴边隐藏逻辑
+        # ===============================
+        if hasattr(self, 'edge_check_timer'):
+            self.edge_check_timer.start(500) 
+            # 稍微延迟一下检查，给双模式一点反应时间
+            QTimer.singleShot(100, self._check_edge_and_hide)
+
+        # ===============================
+        # 2. 双模式切换逻辑
+        # ===============================
+        if getattr(self, 'dual_mode_enabled', False):
+            # 这里放你原来的双模式 leave 逻辑，大概长下面这样：
+            delay = getattr(self.win, 'leave_delay_ms', 500)
+            if delay > 0:
+                if not hasattr(self, '_leave_timer'):
+                    self._leave_timer = QTimer(self)
+                    self._leave_timer.setSingleShot(True)
+                    self._leave_timer.timeout.connect(self._do_leave_mode)
+                self._leave_timer.start(delay)
+            else:
+                self._do_leave_mode()
+
     def _screen_geometry_for(self, point: QPoint):
         """返回指定点所在屏幕的可用几何；若不在任何屏幕内，返回主屏可用几何。
         用于多显示器场景下正确保存/还原位置。"""
@@ -514,27 +632,6 @@ class FloatLabel(QWidget):
         except Exception:
             pass
         return False
-
-    def enterEvent(self, event):
-        """Mouse enters widget - switch to normal (full) mode if dual mode enabled."""
-        super().enterEvent(event)
-        if self.dual_mode_enabled:
-            # 取消待执行的延迟切换
-            if hasattr(self, '_leave_timer') and self._leave_timer.isActive():
-                self._leave_timer.stop()
-            if not self._is_hovered:
-                self._is_hovered = True
-                self._refresh_from_function()
-
-    def leaveEvent(self, event):
-        """Mouse leaves widget - delay 500ms before switching to simple mode."""
-        super().leaveEvent(event)
-        if self.dual_mode_enabled and self._is_hovered:
-            if not hasattr(self, '_leave_timer'):
-                self._leave_timer = QTimer(self)
-                self._leave_timer.setSingleShot(True)
-                self._leave_timer.timeout.connect(self._on_leave_timeout)
-            self._leave_timer.start(max(0, self.leave_delay_ms))
 
     def _on_leave_timeout(self):
         """500ms后确认鼠标确实已离开，切换到简易模式。"""
@@ -1959,6 +2056,7 @@ class FloatLabel(QWidget):
             self._drag_pos = e.globalPosition().toPoint() - self.frameGeometry().topLeft()
             self._pause_refresh()
             self.setFocus(Qt.MouseFocusReason)
+            self.is_dragging = True
 
     def mouseMoveEvent(self, e):
         if getattr(self, "_drag_pos", None) and (e.buttons() & Qt.LeftButton):
@@ -1969,6 +2067,7 @@ class FloatLabel(QWidget):
             self._drag_pos = None
             self._resume_refresh()
             self._notify_change()
+            self._check_edge_and_hide()
 
     def mouseDoubleClickEvent(self, e):
         if e.button() == Qt.LeftButton:
