@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QListWidget, QListWidgetItem, QKeySequenceEdit, QFileDialog, QLineEdit, QMenu
 )
 from WidgetPanel import FloatLabel
+from PySide6.QtWidgets import QSizePolicy
 
 
 class CostDialog(QDialog):
@@ -202,13 +203,16 @@ class SettingsDialog(QDialog):
 
         # 1.自选列表
         g_codes = QGroupBox("自选列表")
-        g_codes.setContentsMargins(3,12,3,6)
+        # 【修改点1】：确保外层布局允许控件填充
+        g_codes.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        g_codes.setContentsMargins(3,25,3,6)
         lay_codes = QHBoxLayout(g_codes)
         lay_codes.setSpacing(6)
         # 1.1 代码列表
         self.list_codes = QListWidget()
         self.list_codes.setEditTriggers(QAbstractItemView.DoubleClicked | QAbstractItemView.SelectedClicked | QAbstractItemView.EditKeyPressed)
-        self.list_codes.setFixedWidth(150)
+        # self.list_codes.setFixedWidth(150)
+        self.list_codes.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         for c in self.win.codes:
             it = QListWidgetItem(c)
             it.setFlags(it.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEditable | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
@@ -236,9 +240,9 @@ class SettingsDialog(QDialog):
             btn_col.addWidget(b)
         btn_col.addStretch(1)
 
-        lay_codes.addWidget(self.list_codes, 1)
+        lay_codes.addWidget(self.list_codes)
         lay_codes.addLayout(btn_col)
-        code_settings.addWidget(g_codes)
+        code_settings.addWidget(g_codes, 1)
 
         self.tabs.addTab(tab_0, "自选列表")
 
