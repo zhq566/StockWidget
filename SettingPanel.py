@@ -634,6 +634,7 @@ class SettingsDialog(QDialog):
         gl_icon.addWidget(self.cmb_icon)
         gl_icon.addWidget(self.btn_pick_icon)
         other_settings.addWidget(g_icon)
+        other_settings.addStretch(1)
 
         self.tabs.addTab(tab_3, "常规")
 
@@ -1172,9 +1173,27 @@ class SettingsDialog(QDialog):
         self.win.set_simple_flag(header, state)
 
     def _apply_tab_size(self, index: int):
-        size = self.tab_sizes.get(index, QSize(480, 400))
-        self.setFixedWidth(size.width())
-        self.setFixedHeight(size.height())
+        target_size = self.tab_sizes.get(index, QSize(480, 400))
+        
+        # 1. 临时解除主窗口所有的尺寸锁定，为变形做准备
+        self.setMinimumSize(0, 0)
+        self.setMaximumSize(16777215, 16777215) 
+
+        # 2. 让后台页面“隐身”，彻底剥夺它们抢占空间的权利
+        for i in range(self.tabs.count()):
+            page = self.tabs.widget(i)
+            if i == index:
+                page.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+            else:
+                page.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        
+        # 3. 强制 QTabWidget 忘记刚才那个巨大的高度，重新计算
+        self.tabs.updateGeometry()
+
+        # 4. 强制一锤定音！直接锁死成你字典里写好的目标尺寸
+        self.setFixedSize(target_size)
+        
+        # 【重要提示】：千万不要再加 self.adjustSize() 了，到这里完美收工！
 
     def pick_fg(self):
         c = QColorDialog.getColor(self.win.fg, self, "选择表格颜色")
