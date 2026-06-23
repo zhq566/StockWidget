@@ -92,6 +92,7 @@ python3 -m PyInstaller -F -w .\StockWidget.py --name StockWidget --icon .\StockW
   * `nf_`开头：场内期货，如：nf_AU0
   * `hf_`开头：场外期货，如：hf_oil
   * `b_`开头：全球指数，如：b_n225
+  * `rt_hk`开头：港股如：rt_hk01810，也可以直接键入01810
   * 汇率，如美元和日元：USDJPY
   * 不符合规则的输入会回退到上次有效值
   * 有一定智能识别功能。

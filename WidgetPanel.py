@@ -844,6 +844,7 @@ class FloatLabel(QWidget):
             is_hf_futures = "str_hf_" in prefix_part
             is_b_futures = 'str_b_' in prefix_part
             is_fx_futures = 'str_fx_' in prefix_part
+            is_hk_stock = "str_rt_hk" in prefix_part or "str_hk" in prefix_part
             # 【新增】：统一的一个期货标志位，方便后续使用
             is_any_futures = is_nf_futures or is_hf_futures
             
@@ -975,6 +976,42 @@ class FloatLabel(QWidget):
                 pur_price     = [0]*10
                 seller        = [0]*10
                 sel_price     = [0]*10
+                etf           = False
+
+            elif is_hk_stock:
+                # ====== 新浪港股解析分支 (如 rt_hk01810) ======
+                if len(parts) < 13:
+                    continue
+                
+                # 提取纯数字代码
+                if 'str_rt_hk' in prefix_part:
+                    code = prefix_part.split('str_rt_hk')[-1]
+                else:
+                    code = prefix_part.split('str_hk')[-1]
+                    
+                name          = parts[1].replace('"', '').replace(';', '') # 港股中文名在第 1 位 (第0位是英文简称)
+                opening_price = float(parts[2] or 0)  # 开盘价
+                prev_close    = float(parts[3] or 0)  # 昨收价
+                high_price    = float(parts[4] or 0)  # 最高价
+                low_price     = float(parts[5] or 0)  # 最低价
+                current_price = float(parts[6] or 0)  # 现价在第 6 位
+                
+                # 港股的买一和卖一
+                first_pur     = float(parts[9] or 0)
+                first_sell    = float(parts[10] or 0)
+                
+                # 港股成交量与成交额
+                deals_vol     = float(parts[11] or 0) 
+                deals_amt     = float(parts[12] or 0) 
+                
+                # ------ 补齐其他没有的数据，防崩溃 ------
+                committee     = 0.0
+                pur_vol       = 0 
+                sel_vol       = 0
+                purchaser     = [0]*10 
+                pur_price     = [first_pur] + [0]*9
+                seller        = [0]*10
+                sel_price     = [first_sell] + [0]*9
                 etf           = False
 
             else:

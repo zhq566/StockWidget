@@ -977,14 +977,17 @@ class SettingsDialog(QDialog):
         elif test_s.isalpha() and not original_s.lower().startswith(('b_', 'hf_', 'nf_', 'gb_', 'fx_')):
             original_s = f"gb_{original_s}"
 
+        elif re.match(r'^\d{5}$', test_s):
+            original_s = f"rt_hk{test_s}"
+
         # ==========================================
         # 第二步：【绿色通道！拦截并规范化特殊接口】
         # ==========================================
         lower_s = original_s.lower()
-        if lower_s.startswith(('nf_', 'hf_', 'b_', 'gb_', 'fx_')):
+        if lower_s.startswith(('nf_', 'hf_', 'b_', 'gb_', 'fx_', 'rt_hk', 'hk')):
             
-            # 【新增】：外汇 (fx_ 开头) 新浪要求全部小写即可
-            if lower_s.startswith('fx_'):
+            # 【新增】：外汇和港股新浪要求全部小写即可
+            if lower_s.startswith(('fx_', 'rt_hk', 'hk')):
                 return lower_s
                 
             parts = original_s.split('_', 1)
