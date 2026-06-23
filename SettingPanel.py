@@ -368,14 +368,29 @@ class SettingsDialog(QDialog):
 
         g_flag_deal = QGroupBox("成交")
         gl_flag_deal = QGridLayout(g_flag_deal)
-        gl_flag_deal.setHorizontalSpacing(6)
-        gl_flag_deal.setVerticalSpacing(6)
+        
+        # 1. 稍微放宽四周的边距 (左, 上, 右, 下)，给 GroupBox 的标题留出空间
+        gl_flag_deal.setContentsMargins(10, 15, 10, 10) 
+        gl_flag_deal.setHorizontalSpacing(10)
+        gl_flag_deal.setVerticalSpacing(8)
+        
         for i, idx in enumerate(range(9,14)):
             cb = QCheckBox(cb_texts[idx])
+            
+            # 【核心修复 1】：强制给 CheckBox 设置一个最小高度，防止文字被上下裁切
+            cb.setMinimumHeight(22) 
+            
             cb.setChecked(self.win.header_is_visible(cb_texts[idx]))
             cb.stateChanged.connect(partial(self._on_cb_changed, cb_texts[idx]))
             self.cbs.append(cb)
-            gl_flag_deal.addWidget(cb, i // 2, i % 2)
+            
+            # 【核心修复 2】：使用 Qt.AlignTop，让复选框在自己的网格里靠上对齐，不要被强行拉伸
+            gl_flag_deal.addWidget(cb, i // 2, i % 2, alignment=Qt.AlignTop)
+            
+        # 【核心修复 3】：在网格的最下面（第 3 行，因为上面是 0, 1, 2 行）加一个垂直弹簧。
+        # 这样当外层窗口缩放时，这个弹簧会吸收多余的形变，复选框就不会被挤压了。
+        gl_flag_deal.setRowStretch(3, 1)
+
         gl_flags.addWidget(g_flag_deal, 1, 1)
 
         g_flag_other = QGroupBox("其他")
