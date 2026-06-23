@@ -761,18 +761,61 @@ class FloatLabel(QWidget):
             except Exception:
                 pass
 
+    def smart_format_code(self, raw_code):
+        """
+        智能识别股票/期货/指数代码并补全前缀
+        """
+        raw_code = str(raw_code).strip()
+        
+        # 1. 如果用户已经自带了前缀（比如已经输入了 hf_XAU, sh600519），直接放行
+        if "_" in raw_code or raw_code.startswith(("sh", "sz", "bj")):
+            return raw_code
+            
+        # 2. 纯数字：国内 A股 / ETF / 转债 自动识别
+        if raw_code.isdigit() and len(raw_code) == 6:
+            if raw_code.startswith(("6", "5")):
+                return f"sh{raw_code}"  # 沪市股票(6)或ETF(5)
+            elif raw_code.startswith(("0", "3", "1")):
+                return f"sz{raw_code}"  # 深市股票(0,3)或ETF(1)
+            elif raw_code.startswith(("4", "8")):
+                return f"bj{raw_code}"  # 北交所
+                
+        # 3. 常见外盘现货 / 期货 (转化为 hf_ 大写)
+        hf_list = ["XAU", "XAG", "OIL", "CL", "GC", "SI"]
+        if raw_code.upper() in hf_list:
+            return f"hf_{raw_code.upper()}"
+            
+        # 4. 常见全球指数 (转化为 b_ 大写)
+        b_list = ["NKY", "DJI", "IXIC", "SPX", "HSI"]
+        if raw_code.upper() in b_list:
+            return f"b_{raw_code.upper()}"
+            
+        # 5. 如果是纯英文字母（且不在上面列表里），默认当成美股 (转化为 gb_ 小写)
+        if raw_code.isalpha():
+            return f"gb_{raw_code.lower()}"
+            
+        # 兜底返回原样
+        return raw_code
+
     # ----- 数据来源：新浪财经 -----
     def _get_price(self, codes:list):
         formatted_codes = []
         for c in codes:
-            c_str = str(c).strip()
+            c_str = self.smart_format_code(c)
+            print(c, " ",c_str)
             if not c_str: 
                 continue
-            # 如果是期货，强制变成小写前缀 + 大写代码 (例如 nf_ + AU0)
-            if c_str.lower().startswith(('nf_', 'hf_')):
-                formatted_codes.append(c_str[:3].lower() + c_str[3:].upper())
+                
+            # 兼容处理：遇到 nf_ (国内期货), hf_ (外盘), b_ (全球指数)，保证前缀小写，后缀大写
+            if c_str.lower().startswith(('nf_', 'hf_', 'b_')):
+                # 用 '_' 分割更安全，不用管前缀是 2 位还是 3 位
+                parts = c_str.split('_', 1)
+                if len(parts) == 2:
+                    formatted_codes.append(f"{parts[0].lower()}_{parts[1].upper()}")
+                else:
+                    formatted_codes.append(c_str)
             else:
-                # 如果是A股，保持全小写
+                # 对于 A股 (sh/sz/bj) 或 美股 (gb_)，保持全小写即可
                 formatted_codes.append(c_str.lower())
                 
         label = ",".join(formatted_codes)
@@ -800,6 +843,7 @@ class FloatLabel(QWidget):
             # 判断是否为内盘期货 (nf_) 或 外盘期货 (hf_)
             is_nf_futures = "str_nf_" in prefix_part
             is_hf_futures = "str_hf_" in prefix_part
+            is_b_futures = 'str_b_' in prefix_part
             # 【新增】：统一的一个期货标志位，方便后续使用
             is_any_futures = is_nf_futures or is_hf_futures
             
@@ -872,6 +916,39 @@ class FloatLabel(QWidget):
                 seller    = [sel_vol] + [0]*9
                 sel_price = [first_sell] + [0]*9
                 etf = False
+
+            elif is_b_futures:
+                # ====== 新浪全球指数解析分支 (如 b_NKY) ======
+                # 指数返回的数据非常短，通常只有名称、点数、涨跌额、涨跌幅等几个核心数据
+                if len(parts) < 4:
+                    continue
+                    
+                code          = prefix_part.split('str_b_')[-1]
+                name          = parts[0].replace('"', '').replace(';', '')
+                current_price = float(parts[1] or 0)
+                
+                # 新浪全球指数通常 parts[2] 是涨跌额，parts[3] 是涨跌幅百分比
+                change_amount = float(parts[2] or 0)
+                
+                # 指数接口通常不给昨收，我们需要通过公式【昨收 = 现价 - 涨跌额】自己推算出来
+                prev_close    = current_price - change_amount
+                
+                # ====== 下面这些是指数没有的数据，统一填 0 防止你的浮窗报错 ======
+                opening_price = 0.0
+                high_price    = 0.0
+                low_price     = 0.0
+                first_pur     = 0.0
+                first_sell    = 0.0
+                deals_vol     = 0.0
+                deals_amt     = 0.0
+                committee     = 0.0
+                pur_vol       = 0 
+                sel_vol       = 0
+                purchaser     = [0]*10 
+                pur_price     = [0]*10
+                seller        = [0]*10
+                sel_price     = [0]*10
+                etf           = False
 
             else:
                 if len(parts) < 30:

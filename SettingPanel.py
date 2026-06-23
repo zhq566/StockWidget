@@ -931,31 +931,67 @@ class SettingsDialog(QDialog):
     _re_futures = re.compile(r'^(nf|hf)_[a-zA-Z0-9]+$', re.IGNORECASE)
 
     def _normalize_code_or_none(self, s: str):
-        # 先不要转全小写，保留原始输入用于判断期货
         original_s = (s or "").strip()
+        if not original_s: 
+            return None
+            
+        # ==========================================
+        # 第一步：【智能免敲前缀 & 别名纠错】
+        # ==========================================
+        test_s = original_s.upper()
+        
+        # 1. 常见外盘现货/期货
+        if test_s in ["XAU", "XAG", "OIL", "CL", "GC", "SI"]:
+            original_s = f"hf_{test_s}"
+            
+        # 2. 常见全球指数 
+        elif test_s in ["NKY", "N225", "N255", "DJI", "IXIC", "SPX", "HSI"]:
+            if test_s in ["N225", "N255"]: 
+                test_s = "NKY" 
+            original_s = f"b_{test_s}"
+            
+        # 3. 【新增】：国内期货智能识别 (1~3个字母 + 1~4个数字，例如 AU0, rb2410)
+        # 排除掉 sh/sz/bj 开头的股票代码(比如 sh0001)，防止误伤
+        elif re.match(r'^[A-Z]{1,3}\d{1,4}$', test_s) and not test_s.startswith(('SH', 'SZ', 'BJ')):
+            original_s = f"nf_{original_s}"
+            
+        # 4. 纯字母默认美股 (例如 AAPL -> gb_aapl)
+        elif test_s.isalpha() and not original_s.lower().startswith(('b_', 'hf_', 'nf_', 'gb_')):
+            original_s = f"gb_{original_s}"
+
+        # ==========================================
+        # 第二步：【绿色通道！拦截并规范化特殊接口】
+        # ==========================================
+        lower_s = original_s.lower()
+        if lower_s.startswith(('nf_', 'hf_', 'b_', 'gb_')):
+            parts = original_s.split('_', 1)
+            if len(parts) == 2:
+                prefix = parts[0].lower()
+                code = parts[1]
+                
+                if prefix in ['nf', 'hf', 'b']:
+                    return f"{prefix}_{code.upper()}"
+                elif prefix == 'gb':
+                    return f"{prefix}_{code.lower()}"
+                    
+            return original_s
+        # ==========================================
         
         # ==========================================
-        # 【新增逻辑】：提前拦截并放行期货代码
+        # 第三步：【原作者的 A 股处理逻辑兜底】
         # ==========================================
-        if self._re_futures.match(original_s):
-            # 新浪期货接口建议：前缀小写 (nf_)，后面代码大写 (AU0)
-            prefix = original_s[:3].lower()
-            code = original_s[3:].upper()
-            return prefix + code
-        # ==========================================
-        
-        # --- 以下是原作者的 A 股处理逻辑（保留不动） ---
-        s = original_s.lower()
-        s = re.sub(r'[^a-z0-9]', '', s)
+        s = lower_s
+        s = re.sub(r'[^a-z0-9]', '', s)  
         if not s: return None
-        if self._re_full.match(s): return s
-        if self._re_6.match(s):
+        if getattr(self, '_re_full', None) and self._re_full.match(s): return s
+        if getattr(self, '_re_6', None) and self._re_6.match(s):
             if s[0] == '6' or s[0:2] == '90' or s[0] == '5':
                 return 'sh' + s
             elif s[0] == '0' or s[0] == '3' or s[0] == '2' or s[0] == '1':
                 return 'sz' + s
             elif s[0] == '8' or s[0] == '4' or s[0:2] == '92':
                 return 'bj' + s
+                
         return None
 
     def _collect_codes_from_list(self):
