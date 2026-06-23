@@ -33,7 +33,7 @@ class FloatLabel(QWidget):
         self.anim = QPropertyAnimation(self, b"pos")
         self.anim.setDuration(200) # 动画时长 200 毫秒
 
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setFocusPolicy(Qt.StrongFocus)
 
