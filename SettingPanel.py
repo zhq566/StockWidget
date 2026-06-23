@@ -950,20 +950,28 @@ class SettingsDialog(QDialog):
                 test_s = "NKY" 
             original_s = f"b_{test_s}"
             
-        # 3. 【新增】：国内期货智能识别 (1~3个字母 + 1~4个数字，例如 AU0, rb2410)
-        # 排除掉 sh/sz/bj 开头的股票代码(比如 sh0001)，防止误伤
+        # 3. 国内期货智能识别 (1~3个字母 + 1~4个数字)
         elif re.match(r'^[A-Z]{1,3}\d{1,4}$', test_s) and not test_s.startswith(('SH', 'SZ', 'BJ')):
             original_s = f"nf_{original_s}"
             
-        # 4. 纯字母默认美股 (例如 AAPL -> gb_aapl)
-        elif test_s.isalpha() and not original_s.lower().startswith(('b_', 'hf_', 'nf_', 'gb_')):
+        # 4. 【新增】：常见外汇对 (自动转为 fx_s_ + 小写)
+        elif test_s in ["USDJPY", "EURUSD", "GBPUSD", "USDCNY", "USDCNH", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD"]:
+            original_s = f"fx_s{test_s.lower()}"  # 变成 fx_susdjpy
+            
+        # 5. 纯字母默认美股 (例如 AAPL -> gb_aapl)
+        elif test_s.isalpha() and not original_s.lower().startswith(('b_', 'hf_', 'nf_', 'gb_', 'fx_')):
             original_s = f"gb_{original_s}"
 
         # ==========================================
         # 第二步：【绿色通道！拦截并规范化特殊接口】
         # ==========================================
         lower_s = original_s.lower()
-        if lower_s.startswith(('nf_', 'hf_', 'b_', 'gb_')):
+        if lower_s.startswith(('nf_', 'hf_', 'b_', 'gb_', 'fx_')):
+            
+            # 【新增】：外汇 (fx_ 开头) 新浪要求全部小写即可
+            if lower_s.startswith('fx_'):
+                return lower_s
+                
             parts = original_s.split('_', 1)
             if len(parts) == 2:
                 prefix = parts[0].lower()

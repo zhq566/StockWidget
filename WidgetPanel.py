@@ -802,7 +802,6 @@ class FloatLabel(QWidget):
         formatted_codes = []
         for c in codes:
             c_str = self.smart_format_code(c)
-            print(c, " ",c_str)
             if not c_str: 
                 continue
                 
@@ -844,6 +843,7 @@ class FloatLabel(QWidget):
             is_nf_futures = "str_nf_" in prefix_part
             is_hf_futures = "str_hf_" in prefix_part
             is_b_futures = 'str_b_' in prefix_part
+            is_fx_futures = 'str_fx_' in prefix_part
             # 【新增】：统一的一个期货标志位，方便后续使用
             is_any_futures = is_nf_futures or is_hf_futures
             
@@ -939,6 +939,33 @@ class FloatLabel(QWidget):
                 low_price     = 0.0
                 first_pur     = 0.0
                 first_sell    = 0.0
+                deals_vol     = 0.0
+                deals_amt     = 0.0
+                committee     = 0.0
+                pur_vol       = 0 
+                sel_vol       = 0
+                purchaser     = [0]*10 
+                pur_price     = [0]*10
+                seller        = [0]*10
+                sel_price     = [0]*10
+                etf           = False
+
+            elif is_fx_futures:
+                if len(parts) < 10:
+                    continue
+                    
+                code          = prefix_part.split('str_fx_s')[-1].upper()
+                name          = parts[9].replace('"', '').replace(';', '')  # 名称在第 9 位
+                current_price = float(parts[8] or 0)  # 现价在第 8 位
+                prev_close    = float(parts[3] or 0)  # 昨收在第 3 位
+                opening_price = float(parts[5] or 0)
+                high_price    = float(parts[6] or 0)
+                low_price     = float(parts[7] or 0)
+                first_pur     = float(parts[1] or 0)  # 银行买入价
+                first_sell    = float(parts[2] or 0)  # 银行卖出价
+                
+
+                # ------ 下面是没有的数据，统一填 0 防崩溃 ------
                 deals_vol     = 0.0
                 deals_amt     = 0.0
                 committee     = 0.0
