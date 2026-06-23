@@ -1172,16 +1172,20 @@ class FloatLabel(QWidget):
 
             # 委比格式化
             commi_label = self._fmt_signed(committee, 2) + "%"
-            display_code = code[2:] if not is_any_futures and self.short_code else code
+            
+            # 智能提取代码短名
+            display_code = code[2:] if not is_any_futures and getattr(self, 'short_code', False) else code
 
-            # "代码", "名称", "现价", "涨跌值", "涨跌幅", "盈亏", "买一", "卖一", "委比", "成交量", "成交额", "均价", "日高", "日低", "K线"
-            if code[2] not in ('1','5'):
+            if not etf:
                 chg_fmt = self._fmt_signed(change, 2)
                 pct_fmt = self._fmt_signed(change_pct, 2) + "%"
+                
+                current_price_str = f"{arrow}{current_price:.2f}"
+                
                 price_data.append([
-                    code[2:] if self.short_code else code,
-                    name if self.name_length == 0 else name[:self.name_length],
-                    f"{arrow}{current_price:.2f}",
+                    display_code,
+                    name if getattr(self, 'name_length', 0) == 0 else name[:self.name_length],
+                    current_price_str,
                     chg_fmt,
                     pct_fmt,
                     pnl_label,
@@ -1196,12 +1200,16 @@ class FloatLabel(QWidget):
                     k_payload
                 ])
             else:
+                # ETF 的价格保留 3 位小数
                 chg_fmt = self._fmt_signed(change, 3)
                 pct_fmt = self._fmt_signed(change_pct, 2) + "%"
+                
+                current_price_str = f"{arrow}{current_price:.3f}"
+                
                 price_data.append([
-                    code[2:] if self.short_code else code,
-                    name if self.name_length == 0 else name[:self.name_length],
-                    f"{current_price:.3f}{arrow}",
+                    display_code,
+                    name if getattr(self, 'name_length', 0) == 0 else name[:self.name_length],
+                    current_price_str,
                     chg_fmt,
                     pct_fmt,
                     pnl_label,
@@ -1215,6 +1223,8 @@ class FloatLabel(QWidget):
                     f"{low_price:.3f}",
                     k_payload
                 ])
+
+            # 构建信号灯数据保持不变
             sign_data.append({
                 "delta": (change > 0) - (change < 0), 
                 "commi": (committee > 0) - (committee < 0),
