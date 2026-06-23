@@ -813,7 +813,8 @@ class FloatLabel(QWidget):
                 if len(parts) < 14: 
                     continue
                 code          = prefix_part.split('str_hf_')[-1]
-                name          = parts[13]
+                # 第 14 个元素（索引13）的名称清洗一下
+                name = parts[13].replace('"', '').replace(';', '')
                 opening_price = float(parts[8] or 0)
                 high_price    = float(parts[4] or 0)
                 low_price     = float(parts[5] or 0)
@@ -822,10 +823,13 @@ class FloatLabel(QWidget):
                 first_pur     = float(parts[2] or 0)
                 first_sell    = float(parts[3] or 0)
                 
-                # 清洗最后一位的符号，防止转 float 报错
-                vol_str       = parts[14].replace('"', '').replace(';', '')
-                deals_vol     = float(vol_str or 0)
-                
+                # 安全获取成交量：只有长度大于 14，才去取 parts[14]
+                if len(parts) > 14:
+                    vol_str = parts[14].replace('"', '').replace(';', '')
+                    deals_vol = float(vol_str or 0)
+                else:
+                    deals_vol = 0.0  # 长度只有14的现货黄金，乖乖走这里
+
                 deals_amt     = current_price * deals_vol 
                 committee     = 0.0
                 pur_vol       = int(parts[10] or 0) * 100 
