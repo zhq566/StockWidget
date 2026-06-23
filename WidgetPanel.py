@@ -33,7 +33,7 @@ class FloatLabel(QWidget):
         self.anim = QPropertyAnimation(self, b"pos")
         self.anim.setDuration(200) # 动画时长 200 毫秒
 
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setFocusPolicy(Qt.StrongFocus)
 
@@ -2077,6 +2077,9 @@ class FloatLabel(QWidget):
         if e.button() == Qt.LeftButton:
             self._drag_pos = None
             self.hide()
+            # 【核心安全锁】：隐藏后，立刻把贴边检查定时器停掉，防止它在后台报错
+            if hasattr(self, 'edge_check_timer'):
+                self.edge_check_timer.stop()
 
     def eventFilter(self, obj, ev):
         if ev.type() == QEvent.MouseButtonDblClick and hasattr(ev, "button") and ev.button() == Qt.LeftButton:
