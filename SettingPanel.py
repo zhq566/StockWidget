@@ -4,7 +4,7 @@ from functools import partial
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QColor, QFontDatabase, QKeySequence, QDoubleValidator, QIntValidator, QAction
 from PySide6.QtWidgets import (
-    QWidget, QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QTabWidget, QPushButton, QSlider,
+    QScrollArea, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QTabWidget, QPushButton, QSlider,
     QGroupBox, QLabel, QColorDialog, QComboBox, QAbstractItemView,
     QCheckBox, QListWidget, QListWidgetItem, QKeySequenceEdit, QFileDialog, QLineEdit, QMenu
 )
@@ -844,6 +844,73 @@ class SettingsDialog(QDialog):
         alert_settings.addStretch(1)
 
         self.tabs.addTab(tab_4, "报警")
+
+        #第五页：使用说明
+        tab_help = QWidget()
+        lay_help = QVBoxLayout(tab_help)
+        lay_help.setContentsMargins(5, 5, 5, 5)
+        
+        # 1. 创建滚动区域，防止4K或笔记本小屏幕下文字显示不全
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
+        
+        # 2. 用富文本和美观的 HTML 表格来排版说明书
+        help_html = """
+        <div style="line-height: 1.6; font-size: 13px; color: #333333; padding: 10px;">
+            <h3 style="color: #2B579A; margin-top: 0; border-bottom: 2px solid #2B579A; padding-bottom: 5px;">
+                💡 智能输入指南
+            </h3>
+            <p>在自选列表中添加代码时，<b>无需手动敲击任何奇葩的前缀后缀</b>，直接输入品种简称，系统将自动智能化识别：</p>
+            
+            <table border="0" cellpadding="8" cellspacing="0" style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                <tr style="background-color: #E9ECEF; font-weight: bold;">
+                    <td style="width: 25%; border-bottom: 1px solid #DEE2E6;">品种类型</td>
+                    <td style="border-bottom: 1px solid #DEE2E6;">直接输入示例与说明</td>
+                </tr>
+                <tr>
+                    <td style="border-bottom: 1px solid #F1F3F5;"><b>A股 / 美股</b></td>
+                    <td style="border-bottom: 1px solid #F1F3F5;">输入纯数字或纯字母（如 <code>600519</code> 茅台、<code>AAPL</code> 苹果）</td>
+                </tr>
+                <tr style="background-color: #F8F9FA;">
+                    <td style="border-bottom: 1px solid #F1F3F5;"><b>港股行情</b></td>
+                    <td style="border-bottom: 1px solid #F1F3F5;">输入 5 位纯数字（如 <code>00700</code> 腾讯、<code>01810</code> 小米集团）</td>
+                </tr>
+                <tr>
+                    <td style="border-bottom: 1px solid #F1F3F5;"><b>全球指数</b></td>
+                    <td style="border-bottom: 1px solid #F1F3F5;">输入大写简称（如 <code>DJI</code> 道指、<code>NKY</code> 日经、<code>KS11</code> 韩国指数）</td>
+                </tr>
+                <tr style="background-color: #F8F9FA;">
+                    <td style="border-bottom: 1px solid #F1F3F5;"><b>国内期货</b></td>
+                    <td style="border-bottom: 1px solid #F1F3F5;">输入品种字母+数字（如 <code>RB2405</code> 螺纹钢、<code>AU2406</code> 沪金）</td>
+                </tr>
+                <tr>
+                    <td style="border-bottom: 1px solid #F1F3F5;"><b>外盘期货</b></td>
+                    <td style="border-bottom: 1px solid #F1F3F5;">输入国际通用代号（如 <code>XAU</code> 伦敦金、<code>CL</code> 美原油、<code>OIL</code> 原油）</td>
+                </tr>
+                <tr style="background-color: #F8F9FA;">
+                    <td style="border-bottom: 1px solid #F1F3F5;"><b>即期外汇</b></td>
+                    <td style="border-bottom: 1px solid #F1F3F5;">输入 6 位外汇货币对（如 <code>USDJPY</code> 美元日元、<code>EURUSD</code> 汇率）</td>
+                </tr>
+            </table>
+            
+            <div style="margin-top: 20px; padding: 10px; background-color: #FFF3CD; border-left: 4px solid #FFC107; border-radius: 4px;">
+                <b>🛠️ 超级极冷门品种：</b><br/>
+                如果未来上线了全新的冷门国家品种（代码词典未收录），可在输入框中直接键入新浪官方底层的<b>完整前缀代码</b>（例如输入 <code>b_XU100</code> 强行查土耳其指数），系统将开启绿色通道直接放行请求！
+            </div>
+        </div>
+        """
+        
+        lbl_help = QLabel(help_html)
+        lbl_help.setWordWrap(True)  # 激活自动换行
+        lbl_help.setTextFormat(Qt.RichText)
+        
+        # 3. 将标签放入滚动区域，再将滚动区域放入新 Tab
+        scroll_area.setWidget(lbl_help)
+        lay_help.addWidget(scroll_area)
+        
+        # 4. 把这个说明页挂载到 Tab 栏
+        self.tabs.addTab(tab_help, "使用说明")
 
         # ---- 连接 ----
         # 连接：代码列表
