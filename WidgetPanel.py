@@ -844,6 +844,7 @@ class FloatLabel(QWidget):
             is_hf_futures = "str_hf_" in prefix_part
             is_b_futures = 'str_b_' in prefix_part
             is_fx_futures = 'str_fx_' in prefix_part
+            is_gb_stock = "str_gb_" in prefix_part
             is_hk_stock = "str_rt_hk" in prefix_part or "str_hk" in prefix_part
             # 【新增】：统一的一个期货标志位，方便后续使用
             is_any_futures = is_nf_futures or is_hf_futures
@@ -1012,6 +1013,37 @@ class FloatLabel(QWidget):
                 pur_price     = [first_pur] + [0]*9
                 seller        = [0]*10
                 sel_price     = [first_sell] + [0]*9
+                etf           = False
+
+            elif is_gb_stock:
+                # ====== 新浪美股解析分支 (如 gb_aapl) ======
+                if len(parts) < 20:
+                    continue
+                    
+                code          = prefix_part.split('str_gb_')[-1].upper() # 转成大写 AAPL 显示
+                name          = parts[0].replace('"', '').replace(';', '')
+                current_price = float(parts[1] or 0)  # 美股现价在第 1 位
+                change_amount = float(parts[2] or 0)  # 美股涨跌额在第 2 位
+                
+                # 美股接口有时昨收字段会漂移，最安全的方式是用公式反推昨收价：
+                prev_close    = current_price - change_amount
+                
+                opening_price = float(parts[5] or 0)  # 开盘
+                high_price    = float(parts[6] or 0)  # 最高
+                low_price     = float(parts[7] or 0)  # 最低
+                deals_vol     = float(parts[10] or 0) # 成交量
+                
+                # ------ 美股接口不提供买卖盘口数据，统一补 0 防崩溃 ------
+                first_pur     = 0.0
+                first_sell    = 0.0
+                deals_amt     = current_price * deals_vol  # 估算一个大概的成交额
+                committee     = 0.0
+                pur_vol       = 0 
+                sel_vol       = 0
+                purchaser     = [0]*10 
+                pur_price     = [0]*10
+                seller        = [0]*10
+                sel_price     = [0]*10
                 etf           = False
 
             else:
