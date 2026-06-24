@@ -1048,35 +1048,46 @@ class SettingsDialog(QDialog):
             return f"rt_hk{test_s}"
 
         # 2. 全球指数大词典 (涵盖全球核心股市)
+        test_s = original_s.upper()
+
+        # 1. 港股 (5位纯数字，如 01810)
+        if re.match(r'^\d{5}$', test_s):
+            return f"rt_hk{test_s}"
+
+        # 2. 全球其他指数大词典 (【修改】：移出了美股三大指数)
         INDEX_DICT = {
             # 亚洲
             "NKY", "N225", "N255", "KS11", "KOSPI", "TWII", 
-            # 美洲
-            "DJI", "IXIC", "SPX", "IBOV", # IBOV 巴西圣保罗
+            # 美洲 (巴西)
+            "IBOV",
             # 欧洲
-            "UKX", "CAC", "DAX", "MICEX", "RTS", # CAC 法国, DAX 德国, UKX 英国
+            "UKX", "CAC", "DAX", "MICEX", "RTS", 
             # 东南亚/印度/澳洲
             "SENSEX", "NIFTY", "STI", "KLSE", "SETI", "AS51", "NZ50" 
         }
         if test_s in INDEX_DICT:
-            # 处理新浪几个特殊的别名映射
             if test_s in ["N225", "N255"]: test_s = "NKY"
             elif test_s == "KOSPI": test_s = "KS11"
             return f"b_{test_s}"
 
-        # 3. 外盘期货/现货
+        # 3. 【新增】：美股三大指数特供通道 (走 gb_ 美股接口)
+        if test_s in {"DJI", "IXIC", "INX", "SPX"}:
+            if test_s == "SPX": test_s = "INX" # 标普500 新浪只认 INX
+            return f"gb_{test_s.lower()}"
+
+        # 4. 外盘期货/现货
         if test_s in {"XAU", "XAG", "OIL", "CL", "GC", "SI"}:
             return f"hf_{test_s}"
 
-        # 4. 外汇对
+        # 5. 外汇对
         if test_s in {"USDJPY", "EURUSD", "GBPUSD", "USDCNY", "USDCNH", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD"}:
             return f"fx_s{test_s.lower()}"
 
-        # 5. 国内期货 (智能正则：1~3个字母 + 数字，且排除A股前缀)
+        # 6. 国内期货 (智能正则：1~3个字母 + 数字，且排除A股前缀)
         if re.match(r'^[A-Z]{1,3}\d{1,4}$', test_s) and not test_s.startswith(('SH', 'SZ', 'BJ')):
             return f"nf_{original_s.upper()}"
 
-        # 6. 纯字母默认当做美股处理 (如 AAPL)
+        # 7. 纯字母默认当做美股处理 (如 AAPL)
         if test_s.isalpha():
             return f"gb_{original_s.lower()}"
 
