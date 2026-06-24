@@ -949,62 +949,72 @@ class SettingsDialog(QDialog):
         original_s = (s or "").strip()
         if not original_s: 
             return None
-            
-        # ==========================================
-        # 第一步：【智能免敲前缀 & 别名纠错】
-        # ==========================================
-        test_s = original_s.upper()
-        
-        # 1. 常见外盘现货/期货
-        if test_s in ["XAU", "XAG", "OIL", "CL", "GC", "SI"]:
-            original_s = f"hf_{test_s}"
-            
-        # 2. 常见全球指数 
-        elif test_s in ["NKY", "N225", "N255", "DJI", "IXIC", "SPX", "HSI"]:
-            if test_s in ["N225", "N255"]: 
-                test_s = "NKY" 
-            original_s = f"b_{test_s}"
-            
-        # 3. 国内期货智能识别 (1~3个字母 + 1~4个数字)
-        elif re.match(r'^[A-Z]{1,3}\d{1,4}$', test_s) and not test_s.startswith(('SH', 'SZ', 'BJ')):
-            original_s = f"nf_{original_s}"
-            
-        # 4. 【新增】：常见外汇对 (自动转为 fx_s_ + 小写)
-        elif test_s in ["USDJPY", "EURUSD", "GBPUSD", "USDCNY", "USDCNH", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD"]:
-            original_s = f"fx_s{test_s.lower()}"  # 变成 fx_susdjpy
-            
-        # 5. 纯字母默认美股 (例如 AAPL -> gb_aapl)
-        elif test_s.isalpha() and not original_s.lower().startswith(('b_', 'hf_', 'nf_', 'gb_', 'fx_')):
-            original_s = f"gb_{original_s}"
 
-        elif re.match(r'^\d{5}$', test_s):
-            original_s = f"rt_hk{test_s}"
-
-        # ==========================================
-        # 第二步：【绿色通道！拦截并规范化特殊接口】
-        # ==========================================
         lower_s = original_s.lower()
+
+        # ==========================================
+        # 绝招一：【绝对绿灯直通车】——真正的“一劳永逸”！
+        # 如果你未来想看阿根廷指数，但代码里没写，
+        # 你只要在软件输入框里直接敲 `b_MERV`，它就会直接放行发给新浪，无需任何代码修改！
+        # ==========================================
         if lower_s.startswith(('nf_', 'hf_', 'b_', 'gb_', 'fx_', 'rt_hk', 'hk')):
-            
-            # 【新增】：外汇和港股新浪要求全部小写即可
             if lower_s.startswith(('fx_', 'rt_hk', 'hk')):
-                return lower_s
+                return lower_s.replace('fx_s_', 'fx_s') # 兼容外汇旧错码
                 
             parts = original_s.split('_', 1)
             if len(parts) == 2:
                 prefix = parts[0].lower()
                 code = parts[1]
-                
                 if prefix in ['nf', 'hf', 'b']:
                     return f"{prefix}_{code.upper()}"
                 elif prefix == 'gb':
                     return f"{prefix}_{code.lower()}"
-                    
             return original_s
+
         # ==========================================
-        
+        # 绝招二：【品类大词典】——告别无数个 elif
         # ==========================================
-        # 第三步：【原作者的 A 股处理逻辑兜底】
+        test_s = original_s.upper()
+
+        # 1. 港股 (5位纯数字，如 01810)
+        if re.match(r'^\d{5}$', test_s):
+            return f"rt_hk{test_s}"
+
+        # 2. 全球指数大词典 (涵盖全球核心股市)
+        INDEX_DICT = {
+            # 亚洲
+            "NKY", "N225", "N255", "KS11", "KOSPI", "TWII", 
+            # 美洲
+            "DJI", "IXIC", "SPX", "IBOV", # IBOV 巴西圣保罗
+            # 欧洲
+            "UKX", "CAC", "DAX", "MICEX", "RTS", # CAC 法国, DAX 德国, UKX 英国
+            # 东南亚/印度/澳洲
+            "SENSEX", "NIFTY", "STI", "KLSE", "SETI", "AS51", "NZ50" 
+        }
+        if test_s in INDEX_DICT:
+            # 处理新浪几个特殊的别名映射
+            if test_s in ["N225", "N255"]: test_s = "NKY"
+            elif test_s == "KOSPI": test_s = "KS11"
+            return f"b_{test_s}"
+
+        # 3. 外盘期货/现货
+        if test_s in {"XAU", "XAG", "OIL", "CL", "GC", "SI"}:
+            return f"hf_{test_s}"
+
+        # 4. 外汇对
+        if test_s in {"USDJPY", "EURUSD", "GBPUSD", "USDCNY", "USDCNH", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD"}:
+            return f"fx_s{test_s.lower()}"
+
+        # 5. 国内期货 (智能正则：1~3个字母 + 数字，且排除A股前缀)
+        if re.match(r'^[A-Z]{1,3}\d{1,4}$', test_s) and not test_s.startswith(('SH', 'SZ', 'BJ')):
+            return f"nf_{original_s.upper()}"
+
+        # 6. 纯字母默认当做美股处理 (如 AAPL)
+        if test_s.isalpha():
+            return f"gb_{original_s.lower()}"
+
+        # ==========================================
+        # 兜底：原作者的 A 股 / ETF 识别逻辑
         # ==========================================
         s = lower_s
         s = re.sub(r'[^a-z0-9]', '', s)  
