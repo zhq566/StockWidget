@@ -366,7 +366,8 @@ class FloatLabel(QWidget):
         if (modifiers & Qt.ControlModifier) and (col == 0):
             rows = index.row()
             code = self.checked_codes[rows]
-            url = self._get_sina_url(code)
+            url = self._get_xueqiu_url(code)
+            print(url)
             webbrowser.open(url)
         
 
@@ -399,6 +400,43 @@ class FloatLabel(QWidget):
         # 6. 兜底逻辑：所有未匹配品种 -> 调用官方搜索页
         search_code = code.replace('b_', '').replace('hf_', '').replace('nf_', '').replace('fx_', '')
         return f"https://search.sina.com.cn/?q={search_code}"
+    
+    def _get_xueqiu_url(self, code):
+        """
+        将各类资产代码转换为雪球 URL
+        """
+        # 1. A 股 / ETF / LOF (sh/sz/bj 开头)
+        # 雪球规则：直接拼 SH/SZ + 代码，大写即可 (如 SH600519)
+        if code.startswith(('sh', 'sz', 'bj')):
+            return f"https://xueqiu.com/S/{code.upper()}"
+        
+        # 2. 港股 (rt_hk 开头)
+        # 雪球规则：HK + 代码 (如 HK00700)
+        if code.startswith('rt_hk'):
+            hk_code = code.replace('rt_hk', '').upper()
+            return f"https://xueqiu.com/S/{hk_code}"
+        
+        # 3. 美股 (gb_ 开头)
+        # 雪球规则：直接用代码 (如 AAPL)
+        if code.startswith('gb_'):
+            us_code = code.replace('gb_', '').upper()
+            return f"https://xueqiu.com/S/{us_code}"
+        
+        # 4. 全球指数 (b_ 开头) 新浪接口
+        if code.startswith('b_'):
+            # 移除 b_ 前缀并转大写，例如 b_kospi -> KOSPI, b_nky -> NKY
+            idx_code = code.replace('b_', '').upper()
+            return f"https://finance.sina.com.cn/stock/globalindex/quotes/{idx_code}"
+        
+       # 3. 外汇 (fx_) -> 新浪接口
+        if code.startswith('fx_'):
+            fx_code = code.replace('fx_s', '').replace('fx_', '').upper()
+            return f"https://finance.sina.com.cn/money/forex/hq/{fx_code}.shtml"
+
+        # 4. 期货 (hf_ / nf_) -> 新浪接口
+        if code.startswith(('hf_', 'nf_')):
+            f_code = code.split('_')[1].upper()
+            return f"https://finance.sina.com.cn/futures/quotes/{f_code}.shtml"
 
     def _check_edge_and_hide(self):
         try:
