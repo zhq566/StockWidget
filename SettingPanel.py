@@ -882,7 +882,7 @@ class SettingsDialog(QDialog):
                 </tr>
                 <tr style="background-color: #F8F9FA;">
                     <td style="border-bottom: 1px solid #F1F3F5;"><b>国内期货</b></td>
-                    <td style="border-bottom: 1px solid #F1F3F5;">输入品种字母+数字（如 <code>RB2405</code> 螺纹钢、<code>AU2406</code> 沪金）</td>
+                    <td style="border-bottom: 1px solid #F1F3F5;">输入品种字母+数字（如 <code>RB0</code> 螺纹钢、<code>AU0</code> 沪金）</td>
                 </tr>
                 <tr>
                     <td style="border-bottom: 1px solid #F1F3F5;"><b>外盘期货</b></td>

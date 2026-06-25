@@ -1,13 +1,28 @@
 import requests, keyboard, time
 from collections import deque
 from functools import partial
+import webbrowser
 
 from PySide6.QtCore import QPropertyAnimation, QRect, Qt, QEvent, QTimer, Signal, QPoint
-from PySide6.QtGui import QEnterEvent, QFont, QAction, QColor, QGuiApplication
+from PySide6.QtGui import QEnterEvent, QFont, QAction, QColor, QGuiApplication, QPalette
 from PySide6.QtWidgets import QApplication, QWidget, QMenu, QVBoxLayout, QLabel, QTableView, QHeaderView, QAbstractItemView, QFrame, QStyledItemDelegate
 
 from Display import SimpleTableModel, KLineDelegate, DEFAULT_UP_COLOR, DEFAULT_DOWN_COLOR, DEFAULT_TABLE_COLOR
 MIN_FONT_SIZE = 6
+
+from PySide6.QtWidgets import QStyledItemDelegate
+from PySide6.QtWidgets import QStyle
+
+class NoSelectionDelegate(QStyledItemDelegate):
+    def paint(self, painter, option, index):
+        # 1. 强制剥离所有视觉状态，让它看起来永远是“最原始”的状态
+        option.state &= ~QStyle.State_Selected  # 去掉选中
+        option.state &= ~QStyle.State_HasFocus  # 去掉焦点虚线/高亮
+        option.state &= ~QStyle.State_Active    # 去掉激活状态
+
+        # 2. 调用父类绘制
+        super().paint(painter, option, index)
+
 class FloatLabel(QWidget):
     hotkey_triggered = Signal()
     def __init__(self, cfg: dict):
@@ -255,8 +270,12 @@ class FloatLabel(QWidget):
         self.table = QTableView(self.panel)
         self.table.setFrameShape(QFrame.NoFrame)
         self.table.setShowGrid(False)
-        self.table.setSelectionMode(QAbstractItemView.NoSelection)
-        self.table.setFocusPolicy(Qt.NoFocus)
+        # 1. 修改原有设置，允许接收鼠标点击
+        self.table.setFocusPolicy(Qt.ClickFocus)
+        # 2. 把 NoSelection 改为 SingleSelection (允许选中，否则 clicked 信号很难触发)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        # 3. 还有一个隐藏设置：确保点击时选中整行，而不是零散的单元格
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setVisible(self.header_visible)
         self.table.horizontalHeader().setStretchLastSection(False)
@@ -267,6 +286,21 @@ class FloatLabel(QWidget):
         self.table.verticalHeader().setDefaultSectionSize(1)
         self.table.horizontalHeader().setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self.table.setTextElideMode(Qt.ElideNone)
+        self.table.setItemDelegate(NoSelectionDelegate())
+
+        # 获取表格当前的调色板
+        palette = self.table.palette()
+
+        # 将“选中状态的背景色”设置为完全透明
+        palette.setColor(QPalette.Highlight, QColor(0, 0, 0, 0))
+
+        # 将“选中状态的字体颜色”设置为与普通文字颜色一致 (防止反色)
+        palette.setColor(QPalette.HighlightedText, palette.color(QPalette.Text))
+        
+        # 应用这个新的调色板
+        self.table.setPalette(palette)
+        # 3. 连接信号
+        self.table.clicked.connect(self._on_table_clicked)
         self.error_label = QLabel("", self.panel)
         self.error_label.setStyleSheet("color: #ff6666; padding: 2px 4px;")
         self.error_label.setVisible(False)
@@ -324,6 +358,47 @@ class FloatLabel(QWidget):
         self._keep_top_timer.setInterval(1000)  # 每 1000ms 检查一次
         self._keep_top_timer.timeout.connect(self._ensure_on_top)
         self._keep_top_timer.start()
+
+    def _on_table_clicked(self, index):
+        modifiers = QApplication.keyboardModifiers()
+        col = index.column()
+
+        if (modifiers & Qt.ControlModifier) and (col == 0):
+            rows = index.row()
+            code = self.checked_codes[rows]
+            url = self._get_sina_url(code)
+            webbrowser.open(url)
+        
+
+    def _get_sina_url(self, code):
+        # 1. A 股股票 (sh/sz) -> 标准行情页
+        if code.startswith(('sh', 'sz')) and len(code) >= 6 and not (code.startswith(('sh5', 'sz15', 'sz16'))):
+            return f"https://finance.sina.com.cn/realstock/company/{code}/nc.shtml"
+
+        # 2. 基金/ETF/LOF (sh5, sz15, sz16) -> 基金详情页
+        if code.startswith(('sh5', 'sz15', 'sz16')):
+            pure_code = code[2:] 
+            return f"https://finance.sina.com.cn/fund/quotes/{pure_code}/bc.shtml"
+        
+        # 3. 外汇 (fx_) -> 货币详情页
+        if code.startswith('fx_'):
+            fx_code = code.replace('fx_s', '').replace('fx_', '').upper()
+            return f"https://finance.sina.com.cn/money/forex/hq/{fx_code}.shtml"
+
+        # 4. 期货 (hf_ / nf_) -> 期货详情页
+        if code.startswith(('hf_', 'nf_')):
+            f_code = code.split('_')[1].upper()
+            return f"https://finance.sina.com.cn/futures/quotes/{f_code}.shtml"
+
+        # 5. 全球指数 (b_...) -> 使用你刚才发现的正确路径
+        if code.startswith('b_'):
+            # 移除 b_ 前缀并转大写，例如 b_kospi -> KOSPI, b_nky -> NKY
+            idx_code = code.replace('b_', '').upper()
+            return f"https://finance.sina.com.cn/stock/globalindex/quotes/{idx_code}"
+
+        # 6. 兜底逻辑：所有未匹配品种 -> 调用官方搜索页
+        search_code = code.replace('b_', '').replace('hf_', '').replace('nf_', '').replace('fx_', '')
+        return f"https://search.sina.com.cn/?q={search_code}"
 
     def _check_edge_and_hide(self):
         try:
@@ -2265,23 +2340,44 @@ class FloatLabel(QWidget):
                 self.edge_check_timer.stop()
 
     def eventFilter(self, obj, ev):
-        if ev.type() == QEvent.MouseButtonDblClick and hasattr(ev, "button") and ev.button() == Qt.LeftButton:
+        # 1. 双击逻辑保持不变 (这是最优先级的)
+        if ev.type() == QEvent.MouseButtonDblClick and ev.button() == Qt.LeftButton:
             self._drag_pos = None
             self.hide()
             return True
-        if ev.type() == QEvent.MouseButtonPress and hasattr(ev, "button") and ev.button() == Qt.LeftButton:
+
+        # 2. 按下事件：只记录坐标，不拦截 (永远返回 False)
+        if ev.type() == QEvent.MouseButtonPress and ev.button() == Qt.LeftButton:
+            # 记录按下时的初始位置
+            self._drag_start_pos = ev.globalPosition().toPoint()
             self._drag_pos = ev.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            
             self._pause_refresh()
             self.setFocus(Qt.MouseFocusReason)
-            return True
-        if ev.type() == QEvent.MouseMove and hasattr(ev, "buttons") and (ev.buttons() & Qt.LeftButton) and getattr(self, "_drag_pos", None):
-            self.move(ev.globalPosition().toPoint() - self._drag_pos)
-            return True
-        if ev.type() == QEvent.MouseButtonRelease and hasattr(ev, "button") and ev.button() == Qt.LeftButton:
+            # 【关键】：返回 False，确保表格能收到点击事件，从而触发你的 Ctrl+点击
+            return False
+
+        # 3. 移动事件：这是区分“点击”和“拖动”的关键
+        if ev.type() == QEvent.MouseMove and (ev.buttons() & Qt.LeftButton) and hasattr(self, "_drag_start_pos") and self._drag_start_pos:
+            # 计算移动距离
+            move_dist = (ev.globalPosition().toPoint() - self._drag_start_pos).manhattanLength()
+            
+            # 如果移动距离超过 5 像素，才认为是“拖动”，开始移动窗口
+            if move_dist > 5:
+                self.move(ev.globalPosition().toPoint() - self._drag_pos)
+                return True # 拖动时，拦截事件防止表格内容选中
+            
+            # 如果移动距离很小，返回 False，允许表格处理“拖动选择”
+            return False
+
+        # 4. 释放事件
+        if ev.type() == QEvent.MouseButtonRelease and ev.button() == Qt.LeftButton:
+            self._drag_start_pos = None
             self._drag_pos = None
             self._resume_refresh()
             self._notify_change()
-            return True
+            return False # 释放时也放行，避免影响表格逻辑
+
         return QWidget.eventFilter(self, obj, ev)
 
     def closeEvent(self, event): 

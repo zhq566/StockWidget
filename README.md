@@ -122,7 +122,7 @@ python3 -m PyInstaller -F -w .\StockWidget.py --name StockWidget --icon .\StockW
 
   * 左键：显示/隐藏浮窗
   * 右键：设置… / 退出
-
+* **打开票票网站**：Ctrl + 单击票票名称
 ---
 
 ## 🌐 数据来源 & 网络
